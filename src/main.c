@@ -20,7 +20,8 @@
 #include <sys/stat.h>
 #include <string.h>
 #include <gtk/gtk.h>
-#include <libgnomecanvas/libgnomecanvas.h>
+#include <goocanvas.h>
+#include <glade/glade.h>
 
 #include "xournal.h"
 #include "xo-interface.h"
@@ -32,7 +33,8 @@
 #include "xo-shapes.h"
 
 GtkWidget *winMain;
-GnomeCanvas *canvas;
+GooCanvas *canvas;
+GladeXML *xml;
 
 struct Journal journal; // the journal
 struct BgPdf bgpdf;  // the PDF loader stuff
@@ -70,7 +72,7 @@ void init_stuff (int argc, char *argv[])
   ui.hiliter_alpha_mask = 0xffffff00 + (guint)(255*ui.hiliter_opacity);
 
   // we need an empty canvas prior to creating the journal structures
-  canvas = GNOME_CANVAS (gnome_canvas_new_aa ());
+  canvas = goo_canvas_new();
 
   // initialize data
   ui.default_page.bg->canvas_item = NULL;
@@ -147,9 +149,9 @@ void init_stuff (int argc, char *argv[])
   gtk_combo_box_set_focus_on_click(GTK_COMBO_BOX(GET_COMPONENT("comboLayer")), FALSE);
   g_signal_connect(GET_COMPONENT("spinPageNo"), "activate",
           G_CALLBACK(handle_activate_signal), NULL);
-  gtk_container_forall(GTK_CONTAINER(winMain), unset_flags, (gpointer)GTK_CAN_FOCUS);
-  GTK_WIDGET_SET_FLAGS(GTK_WIDGET(canvas), GTK_CAN_FOCUS);
-  GTK_WIDGET_SET_FLAGS(GTK_WIDGET(GET_COMPONENT("spinPageNo")), GTK_CAN_FOCUS);
+  gtk_container_forall(GTK_CONTAINER(winMain), unset_flags, (gpointer) GTK_STATE_FLAG_FOCUSED);
+  GTK_WIDGET_SET_FLAGS(GTK_WIDGET(canvas), GTK_STATE_FLAG_FOCUSED);
+  GTK_WIDGET_SET_FLAGS(GTK_WIDGET(GET_COMPONENT("spinPageNo")), GTK_STATE_FLAG_FOCUSED);
   
   // install hooks on button/key/activation events to make the spinPageNo lose focus
   gtk_container_forall(GTK_CONTAINER(winMain), install_focus_hooks, NULL);
@@ -161,10 +163,10 @@ void init_stuff (int argc, char *argv[])
   gtk_container_add (GTK_CONTAINER (w), GTK_WIDGET (canvas));
   gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW (w), GTK_POLICY_AUTOMATIC, GTK_POLICY_AUTOMATIC);
   gtk_widget_set_events (GTK_WIDGET (canvas), GDK_EXPOSURE_MASK | GDK_POINTER_MOTION_MASK | GDK_BUTTON_MOTION_MASK | GDK_BUTTON_PRESS_MASK | GDK_BUTTON_RELEASE_MASK | GDK_KEY_PRESS_MASK | GDK_ENTER_NOTIFY_MASK | GDK_LEAVE_NOTIFY_MASK);
-  gnome_canvas_set_pixels_per_unit (canvas, ui.zoom);
-  gnome_canvas_set_center_scroll_region (canvas, TRUE);
-  gtk_layout_get_hadjustment(GTK_LAYOUT (canvas))->step_increment = ui.scrollbar_step_increment;
-  gtk_layout_get_vadjustment(GTK_LAYOUT (canvas))->step_increment = ui.scrollbar_step_increment;
+  // FIXME: gnome_canvas_set_pixels_per_unit (canvas, ui.zoom);
+  // FIXME: gnome_canvas_set_center_scroll_region (canvas, TRUE);
+  gtk_scrollable_get_hadjustment(GTK_LAYOUT (canvas))->step_increment = ui.scrollbar_step_increment;
+  gtk_scrollable_get_vadjustment(GTK_LAYOUT (canvas))->step_increment = ui.scrollbar_step_increment;
 
   // set up the page size and canvas size
   update_page_stuff();
@@ -190,7 +192,7 @@ void init_stuff (int argc, char *argv[])
   g_signal_connect ((gpointer) canvas, "motion_notify_event",
                     G_CALLBACK (on_canvas_motion_notify_event),
                     NULL);
-  g_signal_connect ((gpointer) gtk_layout_get_vadjustment(GTK_LAYOUT(canvas)),
+  g_signal_connect ((gpointer) gtk_scrollable_get_vadjustment(GTK_LAYOUT(canvas)),
                     "value-changed", G_CALLBACK (on_vscroll_changed),
                     NULL);
   g_object_set_data (G_OBJECT (winMain), "canvas", canvas);
@@ -313,8 +315,7 @@ void init_stuff (int argc, char *argv[])
 }
 
 
-int
-main (int argc, char *argv[])
+int main (int argc, char *argv[])
 {
   gchar *path, *path1, *path2;
   
@@ -343,7 +344,14 @@ main (int argc, char *argv[])
    * (except popup menus), just so that you see something after building
    * the project. Delete any components that you don't want shown initially.
    */
-  winMain = create_winMain ();
+  xml = glade_xml_new("xournal.glade", "Xournal", 0);
+  if (! xml) {
+	  printf("Failed to load graphical interface");
+	  exit(1);
+  }
+
+  winMain = glade_xml_get_widget(xml, "winMain");
+
   
   init_stuff (argc, argv);
   gtk_window_set_icon(GTK_WINDOW(winMain), create_pixbuf("xournal.png"));
